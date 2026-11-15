@@ -1,0 +1,10 @@
+{
+  "appId": "com.dayline.app",
+  "appName": "Dayline",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}
+
