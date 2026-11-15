@@ -95,7 +95,16 @@ export function createLocalBackend() {
     listMessages: (id) =>
       request(`/api/conversations/${id}/messages`).then((d) => d.messages),
     markRead: (id) => request(`/api/conversations/${id}/read`, { method: "POST" }),
-    deleteMessage: (id) => request(`/api/messages/${id}`, { method: "DELETE" }),
+    deleteMessage: (id, conversationId, mode = "everyone") => {
+      if (socket?.readyState === WebSocket.OPEN && conversationId) {
+        socket.send(JSON.stringify({ type: "delete", conversationId, messageId: id, mode }));
+        return Promise.resolve({ ok: true, mode });
+      }
+      return request(`/api/messages/${id}?mode=${encodeURIComponent(mode)}`, {
+        method: "DELETE",
+        body: { mode },
+      });
+    },
     editMessage(conversationId, messageId, text) {
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: "edit", conversationId, messageId, text }));

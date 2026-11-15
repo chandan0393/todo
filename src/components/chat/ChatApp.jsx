@@ -116,6 +116,27 @@ export default function ChatApp({ api, dark, setDark }) {
           });
         }
 
+        if (ev.type === "delete_for_me") {
+          setMessages((prev) => prev.filter((m) => m.id !== ev.messageId));
+        }
+
+        if (ev.type === "delete") {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === ev.messageId
+                ? {
+                    ...m,
+                    deleted: true,
+                    deletedEveryone: true,
+                    text: "",
+                    mediaUrl: "",
+                    reactions: {},
+                  }
+                : m
+            )
+          );
+        }
+
         if (ev.type === "reaction") {
           setMessages((prev) =>
             prev.map((m) => (m.id === ev.messageId ? { ...m, reactions: ev.reactions } : m))
@@ -249,11 +270,30 @@ export default function ChatApp({ api, dark, setDark }) {
     setReplyTo(null);
   }
 
-  async function removeMessage(message) {
-    await api.deleteMessage(message.id, message.conversationId);
-    setMessages((prev) =>
-      prev.map((m) => (m.id === message.id ? { ...m, deleted: true, text: "", mediaUrl: "", reactions: {} } : m))
-    );
+  async function removeMessage(message, mode = "everyone") {
+    if (mode === "me") {
+      setMessages((prev) => prev.filter((m) => m.id !== message.id));
+    } else {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === message.id
+            ? {
+                ...m,
+                deleted: true,
+                deletedEveryone: true,
+                text: "",
+                mediaUrl: "",
+                reactions: {},
+              }
+            : m
+        )
+      );
+    }
+    try {
+      await api.deleteMessage(message.id, message.conversationId, mode);
+    } catch (err) {
+      console.error("Failed to delete message:", err);
+    }
   }
 
   async function handleReact(messageId, emoji) {

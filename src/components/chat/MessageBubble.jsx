@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, CheckCheck, Copy, CornerDownLeft, Download, FileText, Maximize2, Pencil, Smile, Trash2 } from "lucide-react";
+import { Ban, Check, CheckCheck, Copy, CornerDownLeft, Download, FileText, Maximize2, Pencil, Smile, Trash2 } from "lucide-react";
 import { formatFileSize, formatTime } from "../../lib/format";
 import AudioPlayer from "./AudioPlayer";
 
@@ -102,7 +102,10 @@ export default function MessageBubble({
 
         {/* Message contents */}
         {message.deleted ? (
-          <p className="italic opacity-60">This message was deleted</p>
+          <div className="flex items-center gap-1.5 py-0.5 text-xs italic opacity-60">
+            <Ban className="h-3.5 w-3.5 flex-shrink-0" />
+            <span>{self ? "You deleted this message" : "This message was deleted"}</span>
+          </div>
         ) : (
           <>
             {/* Image attachment */}
@@ -229,16 +232,14 @@ export default function MessageBubble({
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             )}
-            {self && (
-              <button
-                type="button"
-                onClick={() => onDelete(message)}
-                className="rounded-full p-1 text-[#54656f] hover:bg-black/5 hover:text-red-500 dark:text-[#aebac1] dark:hover:bg-white/10"
-                title="Delete message"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => onDelete(message)}
+              className="rounded-full p-1 text-[#54656f] hover:bg-black/5 hover:text-red-500 dark:text-[#aebac1] dark:hover:bg-white/10"
+              title="Delete message"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
           </div>
         )}
       </div>

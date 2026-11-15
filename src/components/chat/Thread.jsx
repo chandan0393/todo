@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, CornerDownLeft, FileText, Mic, Paperclip, Pencil, Search, Send, Smile, Trash2, UploadCloud, X } from "lucide-react";
 import { formatDuration, formatFileSize, formatLastSeen } from "../../lib/format";
 import Avatar from "./Avatar";
+import DeleteModal from "./DeleteModal";
 import EmojiPicker from "./EmojiPicker";
 import MessageBubble from "./MessageBubble";
 
@@ -31,6 +32,7 @@ export default function Thread({
   const [editingMessage, setEditingMessage] = useState(null);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const bottom = useRef(null);
   const recorder = useRef(null);
@@ -429,7 +431,7 @@ export default function Thread({
             currentUserId={me.id}
             otherName={other?.displayName}
             onReply={onReply}
-            onDelete={onDelete}
+            onDelete={(msg) => setDeleteTarget({ message: msg, self: msg.senderId === me.id })}
             onReact={onReact}
             onOpenImage={onOpenImage}
             onStartEdit={startEditing}
@@ -586,6 +588,18 @@ export default function Thread({
           )}
         </form>
       )}
+
+      {/* WhatsApp-style Delete confirmation modal */}
+      <DeleteModal
+        isOpen={Boolean(deleteTarget)}
+        message={deleteTarget?.message}
+        self={deleteTarget?.self}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={(mode) => {
+          onDelete?.(deleteTarget.message, mode);
+          setDeleteTarget(null);
+        }}
+      />
     </section>
   );
 }

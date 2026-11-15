@@ -9,6 +9,7 @@ import {
 } from "firebase/auth";
 import {
   addDoc,
+  arrayUnion,
   collection,
   deleteField,
   doc,
@@ -197,25 +198,38 @@ export function createFirebaseBackend() {
           limit(400)
         )
       );
-      return snap.docs.map((d) => ({
-        id: d.id,
-        conversationId: id,
-        ...d.data(),
-        createdAt: d.data().createdAt?.toMillis?.() || Date.now(),
-      }));
+      const uid = auth.currentUser?.uid;
+      return snap.docs
+        .map((d) => ({
+          id: d.id,
+          conversationId: id,
+          ...d.data(),
+          createdAt: d.data().createdAt?.toMillis?.() || Date.now(),
+        }))
+        .filter((m) => !m.deletedFor || !m.deletedFor.includes(uid));
     },
     async markRead(id) {
       const uid = auth.currentUser.uid;
       await updateDoc(doc(firestore, "conversations", id), { [`unread.${uid}`]: 0 });
     },
-    async deleteMessage(messageId, conversationId) {
+    async deleteMessage(messageId, conversationId, mode = "everyone") {
       if (!conversationId) return;
-      await updateDoc(doc(firestore, "conversations", conversationId, "messages", messageId), {
-        deleted: true,
-        text: "",
-        mediaUrl: "",
-        reactions: {},
-      });
+      const uid = auth.currentUser?.uid;
+      const msgRef = doc(firestore, "conversations", conversationId, "messages", messageId);
+      if (mode === "me") {
+        if (!uid) return;
+        await updateDoc(msgRef, {
+          deletedFor: arrayUnion(uid),
+        });
+      } else {
+        await updateDoc(msgRef, {
+          deleted: true,
+          deletedEveryone: true,
+          text: "",
+          mediaUrl: "",
+          reactions: {},
+        });
+      }
     },
     async toggleReaction(conversationId, messageId, emoji) {
       if (!conversationId || !messageId || !emoji) return;
@@ -301,6 +315,14 @@ export function createFirebaseBackend() {
           (snap) => {
             snap.docChanges().forEach((change) => {
               const data = change.doc.data();
+              if (data.deletedFor && data.deletedFor.includes(uid)) {
+                onEvent({
+                  type: "delete_for_me",
+                  conversationId,
+                  messageId: change.doc.id,
+                });
+                return;
+              }
               onEvent({
                 type: "message",
                 message: {

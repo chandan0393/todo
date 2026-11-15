@@ -240,6 +240,7 @@ app.get("/api/conversations/:id/messages", auth, (req, res) => {
   if (!assertMember(conv, req.user.id)) return res.status(403).json({ error: "Forbidden" });
   const messages = db.messages
     .filter((m) => m.conversationId === conv.id)
+    .filter((m) => !m.deletedFor || !m.deletedFor.includes(req.user.id))
     .sort((a, b) => a.createdAt - b.createdAt);
   res.json({ messages });
 });
@@ -263,13 +264,45 @@ app.delete("/api/messages/:id", auth, (req, res) => {
   if (!msg) return res.status(404).json({ error: "Not found" });
   const conv = db.conversations.find((c) => c.id === msg.conversationId);
   if (!assertMember(conv, req.user.id)) return res.status(403).json({ error: "Forbidden" });
+
+  const mode = req.query.mode || req.body?.mode || "everyone";
+  if (mode === "me") {
+    if (!msg.deletedFor) msg.deletedFor = [];
+    if (!msg.deletedFor.includes(req.user.id)) {
+      msg.deletedFor.push(req.user.id);
+    }
+    persist();
+    emitTo(req.user.id, {
+      type: "delete_for_me",
+      conversationId: conv.id,
+      messageId: msg.id,
+    });
+    return res.json({ ok: true, mode: "me" });
+  }
+
+  // Delete for everyone
+  if (msg.senderId !== req.user.id) {
+    return res.status(403).json({ error: "Can only delete own message for everyone" });
+  }
   msg.deleted = true;
+  msg.deletedEveryone = true;
   msg.text = "";
   msg.mediaUrl = "";
   msg.reactions = {};
+  if (conv.lastMessageSender === req.user.id) {
+    conv.lastMessage = "This message was deleted";
+  }
   persist();
-  emitConv(conv, { type: "message", message: msg });
-  res.json({ ok: true });
+
+  const delPayload = {
+    type: "delete",
+    conversationId: conv.id,
+    messageId: msg.id,
+    message: msg,
+  };
+  emitTo(req.user.id, delPayload);
+  emitConv(conv, delPayload, req.user.id);
+  res.json({ ok: true, mode: "everyone", message: msg });
 });
 
 app.post("/api/messages/:id/react", auth, (req, res) => {
@@ -522,6 +555,48 @@ wss.on("connection", (ws, req) => {
       };
       emitTo(user.id, editPayload);
       emitConv(conv, editPayload, user.id);
+      return;
+    }
+
+    if (msg.type === "delete") {
+      const conv = db.conversations.find((c) => c.id === msg.conversationId);
+      if (!assertMember(conv, user.id)) return;
+      const targetMsg = db.messages.find((m) => m.id === msg.messageId);
+      if (!targetMsg) return;
+
+      const mode = msg.mode || "everyone";
+      if (mode === "me") {
+        if (!targetMsg.deletedFor) targetMsg.deletedFor = [];
+        if (!targetMsg.deletedFor.includes(user.id)) {
+          targetMsg.deletedFor.push(user.id);
+        }
+        persist();
+        emitTo(user.id, {
+          type: "delete_for_me",
+          conversationId: conv.id,
+          messageId: targetMsg.id,
+        });
+      } else {
+        if (targetMsg.senderId !== user.id) return;
+        targetMsg.deleted = true;
+        targetMsg.deletedEveryone = true;
+        targetMsg.text = "";
+        targetMsg.mediaUrl = "";
+        targetMsg.reactions = {};
+        if (conv.lastMessageSender === user.id) {
+          conv.lastMessage = "This message was deleted";
+        }
+        persist();
+
+        const delPayload = {
+          type: "delete",
+          conversationId: conv.id,
+          messageId: targetMsg.id,
+          message: targetMsg,
+        };
+        emitTo(user.id, delPayload);
+        emitConv(conv, delPayload, user.id);
+      }
       return;
     }
 
